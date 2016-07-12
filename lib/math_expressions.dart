@@ -33,6 +33,7 @@
 library math_expressions;
 
 import 'dart:math' as Math;
+import 'package:quiver/core.dart';
 import 'package:vector_math/vector_math.dart' show Vector2, Vector3, Vector4;
 
 part 'src/algebra.dart';

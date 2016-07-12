@@ -62,6 +62,10 @@ abstract class Expression {
   // TODO: Return maximally simplified version of expression. This might not be
   //       possible with the current model, see above.
 
+  bool get isConstant;
+  getConstantValue([EvaluationType type = EvaluationType.REAL]) =>
+    evaluate(type, null);
+
   /**
    * Evaluates this expression according to given type and context.
    */
@@ -108,7 +112,7 @@ abstract class Expression {
    */
   bool _isNumber(Expression exp, [num value = 0]) {
     // Check for literal.
-    if (exp is Literal && exp.isConstant()) {
+    if (exp.isConstant) {
       return exp.getConstantValue() == value;
     }
 
@@ -140,6 +144,61 @@ abstract class BinaryOperator extends Expression {
    * Creates a new [BinaryOperation] from two given expressions.
    */
   BinaryOperator.raw(this.first, this.second);
+
+  String get opString;
+
+  @override
+  bool get isConstant => first.isConstant && second.isConstant;
+
+  _evaluate(var a, var b);
+  Expression _dynamicSimplify(Expression s1, Expression s2);
+
+  @override
+  Expression simplify() {
+    final Expression
+      s1 = first.simplify(),
+      s2 = second.simplify();
+    if (s1.isConstant && s2.isConstant) {
+      return new Number(_evaluate(
+        s1.evaluate(EvaluationType.REAL, null),
+        s2.evaluate(EvaluationType.REAL, null)));
+    }
+
+    return _dynamicSimplify(s1, s2);
+  }
+
+  @override
+  evaluate(EvaluationType type, ContextModel context) =>
+    _evaluate(first.evaluate(type, context), second.evaluate(type, context));
+
+  @override
+  bool operator ==(o) => o is BinaryOperator &&
+    o.opString == opString &&
+    o.first == first &&
+    o.second == second;
+  @override
+  int get hashCode => hash3(opString, first, second);
+
+  @override
+  String toString() => '($first $opString $second)';
+}
+
+/**
+ * Commutative operators do not rely on order.
+ */
+abstract class CommutativeOperator extends BinaryOperator {
+  CommutativeOperator(first, second): super(first, second);
+
+  @override
+  bool operator ==(o) => o is CommutativeOperator &&
+    o.opString == opString &&
+    (o.first == first && o.second == second ||
+      o.first == second && o.second == first);
+  @override
+  int get hashCode {
+    int h1 = first.hashCode, h2 = second.hashCode;
+    return h1 < h2? hash3(opString, h1, h2) : hash3(opString, h2, h1);
+  }
 }
 
 /**
@@ -165,6 +224,21 @@ abstract class UnaryOperator extends Expression {
    * Creates a [UnaryOperation] from the given expression.
    */
   UnaryOperator.raw(this.exp);
+
+  String get opString;
+
+  @override
+  bool get isConstant => exp.isConstant;
+
+  @override
+  bool operator ==(o) => o is UnaryOperator &&
+    o.opString == opString &&
+    o.exp == exp;
+  @override
+  int get hashCode => hash2(opString, exp);
+
+  @override
+  String toString() => '($opString$exp)';
 }
 
 /**
@@ -183,6 +257,9 @@ class UnaryMinus extends UnaryOperator {
    *     minus_one = new UnaryMinus(1);
    */
   UnaryMinus(exp): super(exp);
+
+  @override
+  String get opString => '-';
 
   Expression derive(String toVar) => new UnaryMinus(exp.derive(toVar));
 
@@ -212,14 +289,12 @@ class UnaryMinus extends UnaryOperator {
   evaluate(EvaluationType type, ContextModel context) {
     return -(exp.evaluate(type, context));
   }
-
-  String toString() => '(-$exp)';
 }
 
 /**
  * The plus operator performs an addition.
  */
-class Plus extends BinaryOperator {
+class Plus extends CommutativeOperator {
 
   /**
    * Creates an addition operation on the given expressions.
@@ -232,6 +307,9 @@ class Plus extends BinaryOperator {
    */
   Plus(first, second): super(first, second);
 
+  @override
+  String get opString => '+';
+
   Expression derive(String toVar) => new Plus(first.derive(toVar),
                                               second.derive(toVar));
 
@@ -242,33 +320,30 @@ class Plus extends BinaryOperator {
    * 2. 0 + a = a
    * 3. a + -(b) = a - b
    */
-  Expression simplify() {
-    Expression firstOp = first.simplify();
-    Expression secondOp = second.simplify();
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
 
-    if (_isNumber(firstOp, 0)) {
-      return secondOp;
+    if (_isNumber(s1, 0)) {
+      return s2;
     }
 
-    if (_isNumber(secondOp, 0)) {
-      return firstOp;
+    if (_isNumber(s2, 0)) {
+      return s1;
     }
 
-    if (secondOp is UnaryMinus) {
-      return firstOp - secondOp.exp; // a + -(b) = a - b
+    if (s2 is UnaryMinus) {
+      return s1 - s2.exp; // a + -(b) = a - b
     }
 
-    return new Plus(firstOp, secondOp);
+    return new Plus(s1, s2);
     //TODO -a + b = b - a
     //TODO -a - b = - (a+b)
   }
 
-
-  evaluate(EvaluationType type, ContextModel context) {
-    return first.evaluate(type, context) + second.evaluate(type, context);
+  @override
+  _evaluate(var a, var b) {
+    return a + b;
   }
-
-  String toString() => '($first + $second)';
 }
 
 /**
@@ -287,6 +362,9 @@ class Minus extends BinaryOperator {
    */
   Minus(first, second): super(first, second);
 
+  @override
+  String get opString => '-';
+
   Expression derive(String toVar) => new Minus(first.derive(toVar),
                                                second.derive(toVar));
 
@@ -297,38 +375,35 @@ class Minus extends BinaryOperator {
    * 2. 0 - a = - a
    * 3. a - -(b) = a + b
    */
-  Expression simplify() {
-    Expression firstOp = first.simplify();
-    Expression secondOp = second.simplify();
-
-    if (_isNumber(secondOp, 0)) {
-      return firstOp;
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
+    if (_isNumber(s2, 0)) {
+      return s1;
     }
 
-    if (_isNumber(firstOp, 0)) {
-      return -secondOp;
+    if (_isNumber(s1, 0)) {
+      return -s2;
     }
 
-    if (secondOp is UnaryMinus) {
-      return firstOp + secondOp.exp; // a - -(b) = a + b
+    if (s2 is UnaryMinus) {
+      return s1 + s2.exp; // a - -(b) = a + b
     }
 
-    return new Minus(firstOp, secondOp);
+    return new Minus(s1, s2);
     //TODO -a + b = b - a
     //TODO -a - b = - (a + b)
   }
 
-  evaluate(EvaluationType type, ContextModel context) {
-    return first.evaluate(type, context) - second.evaluate(type, context);
+  @override
+  _evaluate(var a, var b) {
+    return a - b;
   }
-
-  String toString() => '($first - $second)';
 }
 
 /**
  * The times operator performs a multiplication.
  */
-class Times extends BinaryOperator {
+class Times extends CommutativeOperator {
 
   /**
    * Creates a product operation on the given expressions.
@@ -341,8 +416,12 @@ class Times extends BinaryOperator {
    */
   Times(first, second): super(first, second);
 
-  Expression derive(String toVar) => new Plus(new Times(first, second.derive(toVar)),
-                                              new Times(first.derive(toVar), second));
+  @override
+  String get opString => '*';
+
+  Expression derive(String toVar) => new Plus(
+    new Times(first, second.derive(toVar)),
+    new Times(first.derive(toVar), second));
 
   /**
    * Possible simplifications:
@@ -355,41 +434,40 @@ class Times extends BinaryOperator {
    * 6. a * 1 = a
    * 7. 1 * a = a
    */
-  Expression simplify() {
-    Expression firstOp = first.simplify();
-    Expression secondOp = second.simplify();
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
     Expression tempResult;
 
     bool negative = false;
-    if (firstOp is UnaryMinus) {
-      firstOp = (firstOp as UnaryMinus).exp;
+    if (s1 is UnaryMinus) {
+      s1 = (s1 as UnaryMinus).exp;
       negative = !negative;
     }
 
-    if (secondOp is UnaryMinus) {
-      secondOp = (secondOp as UnaryMinus).exp;
+    if (s2 is UnaryMinus) {
+      s2 = (s2 as UnaryMinus).exp;
       negative = !negative;
     }
 
-    if (_isNumber(firstOp, 0)) {
-      return firstOp; // = 0
+    if (_isNumber(s1, 0)) {
+      return s1; // = 0
     }
 
-    if (_isNumber(firstOp, 1)) {
-      tempResult = secondOp;
+    if (_isNumber(s1, 1)) {
+      tempResult = s2;
     }
 
-    if (_isNumber(secondOp, 0)) {
-      return secondOp; // = 0
+    if (_isNumber(s2, 0)) {
+      return s2; // = 0
     }
 
-    if (_isNumber(secondOp, 1)) {
-      tempResult = firstOp;
+    if (_isNumber(s2, 1)) {
+      tempResult = s1;
     }
 
     // If temp result is not set, we return a multiplication
     if (tempResult == null) {
-      tempResult = new Times(firstOp, secondOp);
+      tempResult = new Times(s1, s2);
       return negative ? -tempResult : tempResult;
     }
 
@@ -397,23 +475,21 @@ class Times extends BinaryOperator {
     return negative ? new UnaryMinus(tempResult) : tempResult;
   }
 
+  @override
+  _evaluate(a, b) => a * b;
+
   evaluate(EvaluationType type, ContextModel context) {
     var firstEval = first.evaluate(type, context);
     var secondEval = second.evaluate(type, context);
 
     if (type == EvaluationType.VECTOR) {
-      if (secondEval is double) {
-        // scale - nothing special to do
-      } else {
-        // multiply
+      if (secondEval is! double) {
         return firstEval.multiply(secondEval);
       }
     }
 
     return firstEval * secondEval;
   }
-
-  String toString() => '($first * $second)';
 }
 
 /**
@@ -432,6 +508,9 @@ class Divide extends BinaryOperator {
    */
   Divide(dividend, divisor): super(dividend, divisor);
 
+  @override
+  String get opString => '/';
+
   Expression derive(String toVar) => ((first.derive(toVar) * second)
                                     - (first * second.derive(toVar)))
                                     / (second * second);
@@ -444,32 +523,34 @@ class Divide extends BinaryOperator {
    * 3. -a / -b = a / b
    * 5. 0 / a = 0
    * 6. a / 1 = a
+   * 7. a / a = 1
    */
-  Expression simplify() {
-    Expression firstOp = first.simplify();
-    Expression secondOp = second.simplify();
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
     Expression tempResult;
 
     bool negative = false;
 
-    if (firstOp is UnaryMinus) {
-      firstOp = (firstOp as UnaryMinus).exp;
+    if (s1 is UnaryMinus) {
+      s1 = (s1 as UnaryMinus).exp;
       negative = !negative;
     }
 
-    if (secondOp is UnaryMinus) {
-      secondOp = (secondOp as UnaryMinus).exp;
+    if (s2 is UnaryMinus) {
+      s2 = (s2 as UnaryMinus).exp;
       negative = !negative;
     }
 
-    if (_isNumber(firstOp, 0)) {
-      return firstOp; // = 0
+    if (_isNumber(s1, 0)) {
+      return s1; // = 0
     }
 
-    if (_isNumber(secondOp, 1)) {
-      tempResult = firstOp;
+    if (_isNumber(s2, 1)) {
+      tempResult = s1;
+    } else if (s1 == s2) {
+      tempResult = new Number(1);
     } else {
-      tempResult = new Divide(firstOp, secondOp);
+      tempResult = new Divide(s1, s2);
     }
 
     return negative ? new UnaryMinus(tempResult) : tempResult;
@@ -480,23 +561,21 @@ class Divide extends BinaryOperator {
    * This method throws an [IntegerDivisionByZeroException],
    * if a divide by zero is encountered.
    */
+  @override
+  _evaluate(a, b) => a / b;
+
   evaluate(EvaluationType type, ContextModel context) {
     var firstEval = first.evaluate(type, context);
     var secondEval = second.evaluate(type, context);
 
     if (type == EvaluationType.VECTOR) {
-      if (secondEval is double) {
-        // scale - nothing special to do
-      } else {
-        // divide
+      if (secondEval is! double) {
         return firstEval.divide(secondEval);
       }
     }
 
     return firstEval / secondEval;
   }
-
-  String toString() => '($first / $second)';
 }
 
 /**
@@ -517,6 +596,9 @@ class Modulo extends BinaryOperator {
    */
   Modulo(dividend, divisor): super(dividend, divisor);
 
+  @override
+  String get opString => '%';
+
   Expression derive(String toVar) {
     final Abs a2 = new Abs(second);
     return first.derive(toVar) - new Floor(first / a2) * a2.derive(toVar);
@@ -528,33 +610,21 @@ class Modulo extends BinaryOperator {
    * 1. a % -b = a % b
    * 2. 0 % a = 0
    */
-  Expression simplify() {
-    Expression firstOp = first.simplify();
-    Expression secondOp = second.simplify();
-
-    if (_isNumber(firstOp, 0)) {
-      return firstOp; // = 0
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
+    if (_isNumber(s1, 0)) {
+      return s1; // = 0
     }
 
-    if (secondOp is UnaryMinus) {
-      secondOp = (secondOp as UnaryMinus).exp;
+    if (s2 is UnaryMinus) {
+      s2 = (s2 as UnaryMinus).exp;
     }
 
-    return new Modulo(firstOp, secondOp);
+    return new Modulo(s1, s2);
   }
 
-  evaluate(EvaluationType type, ContextModel context) {
-    var firstEval = first.evaluate(type, context);
-    var secondEval = second.evaluate(type, context);
-
-    if (type == EvaluationType.REAL) {
-      return firstEval % secondEval;
-    }
-
-    throw new UnimplementedError('Evaluate Modulo with type ${type} not supported yet.');
-  }
-
-  String toString() => '($first % $second)';
+  @override
+  _evaluate(a, b) => a % b;
 }
 
 /**
@@ -573,6 +643,12 @@ class Power extends BinaryOperator {
    */
   Power(x, exp): super(x, exp);
 
+  @override
+  bool get isConstant => false; // TODO transcendental?
+
+  @override
+  String get opString => '^';
+
   Expression derive(String toVar) => this.asE().derive(toVar);
 
   /**
@@ -583,10 +659,8 @@ class Power extends BinaryOperator {
    * 3. x^0 = 1
    * 4. x^1 = x
    */
-  Expression simplify() {
-    Expression baseOp = first.simplify();
-    Expression exponentOp = second.simplify();
-
+  @override
+  Expression _dynamicSimplify(Expression s1, Expression s2) {
     //TODO unboxing
     /*
     bool baseNegative = false, expNegative = false;
@@ -602,25 +676,29 @@ class Power extends BinaryOperator {
     }
     */
 
-    if (_isNumber(baseOp, 0)) {
-      return baseOp; // 0^x = 0
+    if (_isNumber(s1, 0)) {
+      return s1; // 0^x = 0
     }
 
-    if (_isNumber(baseOp, 1)) {
-      return baseOp; // 1^x = 1
+    if (_isNumber(s1, 1)) {
+      return s1; // 1^x = 1
     }
 
-    if (_isNumber(exponentOp, 0)) {
+    if (_isNumber(s2, 0)) {
       return new Number(1.0); // x^0 = 1
     }
 
-    if (_isNumber(exponentOp, 1)) {
-      return baseOp; // x^1 = x
+    if (_isNumber(s2, 1)) {
+      return s1; // x^1 = x
     }
 
-    return new Power(baseOp, exponentOp);
+    return new Power(s1, s2);
   }
 
+  @override
+  _evaluate(a, b) => Math.pow(a, b);
+
+  @override
   evaluate(EvaluationType type, ContextModel context) {
     if (type == EvaluationType.REAL) {
       return Math.pow(first.evaluate(type, context), second.evaluate(type, context));
@@ -697,37 +775,25 @@ abstract class Literal extends Expression {
    */
   Literal([var this.value]);
 
-  /**
-   * Returns true, if this literal is a constant.
-   */
-  bool isConstant() => false;
-
-  /**
-   * Returns the constant value of this literal.
-   * Throws StateError if literal is not constant, check before usage with
-   * `isConstant()`.
-   */
-  num getConstantValue() {
-    throw new StateError('Literal ${this} is not constant.');
-  }
-
   String toString() => value.toString();
+
+  @override
+  bool operator ==(o) => o is Literal && o.value == value;
+  @override
+  int get hashCode => value.hashCode;
 }
 
 /**
  * A number is a constant number literal.
  */
 class Number extends Literal {
-
   /**
    * Creates a number literal with given value.
    * Always holds a double internally.
    */
   Number(num value): super(value.toDouble());
 
-  bool isConstant() => true;
-
-  double getConstantValue() => value;
+  bool get isConstant => true;
 
   evaluate(EvaluationType type, ContextModel context) {
     if (type == EvaluationType.REAL) {
@@ -846,26 +912,23 @@ class Vector extends Literal {
     throw new UnsupportedError('Vector $this with length $length can not be interpreted as: $type');
   }
 
-  bool isConstant() => elements.fold(true, (prev, elem) => prev && (elem is Literal && elem.isConstant()));
-
-  getConstantValue() {
-    // TODO unit test
-    List<Expression> constVals = [];
-    elements.forEach((e) => constVals.add(e.getConstantValue()));
-    return new Vector(constVals);
-  }
+  bool get isConstant => elements.fold(true,
+    (prev, elem) => prev && elem.isConstant);
 }
 
 /**
  * A variable is a named literal.
  */
 class Variable extends Literal {
-  String name;
+  String get name => value as String;
 
   /**
    * Creates a variable literal with given name.
    */
-  Variable(String this.name);
+  Variable(String name): super(name);
+
+  @override
+  bool get isConstant => false;
 
   Expression derive(String toVar) => name == toVar ? new Number(1.0) : new Number(0.0);
 
@@ -889,10 +952,7 @@ class BoundVariable extends Variable {
     this.value = expr;
   }
 
-  // TODO Make this work on arbitrary expressions, not just literals?
-  bool isConstant() => value is Literal ? value.isConstant() : false;
-
-  getConstantValue() => value.value;
+  bool get isConstant => value.isConstant;
 
   // Anonymous, bound variable, derive content and unbox.
   Expression derive(String toVar) => value.derive(toVar); //TODO Needs boxing?
@@ -901,7 +961,8 @@ class BoundVariable extends Variable {
   //      How to reassign anonymous variables to functions?
   Expression simplify() => value.simplify();
 
-  evaluate(EvaluationType type, ContextModel context) => value.evaluate(type, context);
+  evaluate(EvaluationType type, ContextModel context) =>
+    value.evaluate(type, context);
 
   /// Put bound variable in curly brackets to make them distinguishable.
   String toString() => '{$value}';
@@ -953,10 +1014,8 @@ class IntervalLiteral extends Literal {
     throw new UnsupportedError('Interval $this can not be interpreted as: ${type}');
   }
 
+  @override
   String toString() => 'I[$min, $max]';
-
-  bool isConstant() => min is Literal && (min as Literal).isConstant()
-                    && max is Literal && (max as Literal).isConstant();
-
-  getConstantValue() => new Interval(min.getConstantValue(), max.getConstantValue());
+  @override
+  bool get isConstant => min.isConstant && max.isConstant;
 }

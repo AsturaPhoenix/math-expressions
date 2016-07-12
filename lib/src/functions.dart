@@ -24,6 +24,9 @@ abstract class MathFunction extends Expression {
    */
   MathFunction(this.name, this.args);
 
+  @override
+  bool get isConstant => false; //TODO isTranscendental
+
   /**
    * Creates a new function with the given name.
    *

@@ -15,6 +15,7 @@ class ExpressionTests extends TestSet {
     'Unary Op Convenience creation': convenienceUnaryCreation,
     'Operator simplification': baseOperatorSimplification,
     'Operator differentiation': baseOperatorDifferentiation,
+    'Composite operator differentiation': compOperatorDifferentiation,
     'Simple evaluation [REAL]': simpleRealEval,
     'Simple evaluation [INTERVAL]': simpleIntervalEval,
     'Simple evaluation [VECTOR]': simpleVectorEval,
@@ -211,8 +212,12 @@ class ExpressionTests extends TestSet {
     /*
      *  Plus
      */
+    // const + const = const
+    Expression exp = new Plus(3, 5);
+    expect((exp.simplify() as Number).value, 8);
+
     // a + 0 = a
-    Expression exp = new Plus('a', 0);
+    exp = new Plus('a', 0);
     expect(_isVariable(exp.simplify(), 'a'), isTrue);
 
     // 0 + a = a
@@ -316,6 +321,14 @@ class ExpressionTests extends TestSet {
     exp = new Divide(new Variable('a'), 1);
     expect(_isVariable(exp.simplify(), 'a'), isTrue);
 
+    // a / a = 1
+    exp = new Divide('a', 'a');
+    expect((exp.simplify() as Number).value == 1, isTrue);
+
+    // a / -a = -1
+    exp = new Divide('a', -new Variable('a'));
+    expect(((exp.simplify() as UnaryMinus).exp as Number).value == 1, isTrue);
+
     /*
      *  Power
      */
@@ -359,12 +372,14 @@ class ExpressionTests extends TestSet {
                  [new Minus (1, 'x') ,  'x',      '0.0-1.0',  '-1.0'],
                  [new Minus ('x', 1) ,  'x',      '1.0-0.0',  '1.0'],
                  [new Times('x', 1),    'x',      'x*0.0+1.0*1.0',  '1.0'],
-                 [new Divide('x',2),    'x',      '((1.0*2.0)-(x*0.0))/(2.0*2.0)',
-                  '2.0/(2.0*2.0)'],
+                 [new Divide('x', 2),   'x',
+                  '((1.0*2.0)-(x*0.0))/(2.0*2.0)',
+                  '0.5'],
                  [new Modulo('x', 'x'), 'x',
                   '1.0 - floor(x / abs(x)) * (sgn(x) * 1.0)',
                   '1.0 - floor(x / abs(x)) * sgn(x)'],
-                 [new Power('x',2),     'x',      'exp(2.0 * ln(x)) * ((2.0 * (1.0 / x)) + (0.0 * ln(x)))',
+                 [new Power('x',2),     'x',
+                  'exp(2.0 * ln(x)) * ((2.0 * (1.0 / x)) + (0.0 * ln(x)))',
                   'x^2.0 * (2.0 * (1.0 / x))'],
                 ];
 
@@ -377,6 +392,12 @@ class ExpressionTests extends TestSet {
       expect(exp.derive(deriveTo), _equalsExpression(expected, simplify:false));
       expect(exp.derive(deriveTo), _equalsExpression(expectedSimpl));
     }
+  }
+
+  void compOperatorDifferentiation() {
+    expect((new Number(4) % new Variable('x') / new Number(3))
+      .derive('x').simplify(),
+      _equalsExpression('-(floor(4.0/abs(x)) * sgn(x) * 3.0 / 9.0)'));
   }
 
   /// Tests REAL evaluation of basic operators.
@@ -1146,7 +1167,7 @@ class ExpressionMatcher extends Matcher {
   bool matches(item, Map matchState) {
     if (item is Expression) {
       // Simplify and tokenize.
-      Expression expr = _simplify ? _simplifyExp((item as Expression)) : (item as Expression);
+      Expression expr = _simplify ? item.simplify() : item;
       String itemStr = expr.toString();
       List<Token> itemRPN = _lexer.tokenizeToRPN(itemStr);
 
@@ -1167,18 +1188,6 @@ class ExpressionMatcher extends Matcher {
       return orderedEquals(_exprRPN).matches(itemRPN, matchState);
     }
     return false;
-  }
-
-  /// Simplifies the given expression.
-  Expression _simplifyExp(Expression exp) {
-    String expString;
-    Expression expSimplified = exp;
-    do {
-      expString = expSimplified.toString();
-      expSimplified = exp.simplify();
-    } while (expString != expSimplified.toString());
-
-    return expSimplified;
   }
 
   Description describe(Description description) =>
