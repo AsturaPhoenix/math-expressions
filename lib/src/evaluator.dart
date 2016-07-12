@@ -4,86 +4,27 @@ part of math_expressions;
  * Mathematical expressions must be evaluated under a certain [EvaluationType].
  *
  * Currently there are three types, but not all expressions support each type.
- * If you try to evaluate an expression with an unsupported type, it will raise an
- * [UnimplementedError] or [UnsupportedError].
+ * If you try to evaluate an expression with an unsupported type, it will raise
+ * an [UnimplementedError] or [UnsupportedError].
  *
  * - REAL
  * - VECTOR
  * - INTERVAL
- *
- * __Note__: This class emulates an enumeration, since they are not supported
- * by Dart yet.
  */
-class EvaluationType {
-
-  /// Our type map.
-  static Map<int, EvaluationType> _cache;
-  final int type;
-  final String _text;
-
-  /**
-   * Private singleton constructor, no need to instantiate new objects
-   * all the time.
-   */
-  factory EvaluationType._private(int type, String text) {
-    if (_cache == null) {
-      _cache = new Map<int, EvaluationType>();
-    }
-
-    if (_cache.containsKey(type)) {
-      // We already have cached this type.
-      return _cache[type];
-    } else {
-      // Create new Type Object.
-      final EvaluationType et = new EvaluationType._internal(type, text);
-      _cache[type] = et;
-      return et;
-    }
-  }
-
-  /**
-   * Internal constructor for EvaluationTypes.
-   */
-  EvaluationType._internal(int this.type, String this._text);
-
-  /// Public constructor for REAL types. Always returns the same instance of a REAL type.
-  static EvaluationType get REAL => new EvaluationType._private(REAL_INT, 'REAL');
-
-  /// Public constructor for VECTOR types. Always returns the same instance of a VECTOR type.
-  static EvaluationType get VECTOR => new EvaluationType._private(VECTOR_INT, 'VECTOR');
-
-  /// Public constructor for INTERVAL types. Always returns the same instance of a INTERVAL type.
-  static EvaluationType get INTERVAL => new EvaluationType._private(INTERVAL_INT, 'INTERVAL');
-
-  /// Internal integer value for REAL type.
-  static final int REAL_INT = 1;
-
-  /// Internal integer value for VECTOR type.
-  static final int VECTOR_INT = 2;
-
-  /// Internal integer value for INTERVAL type.
-  static final int INTERVAL_INT = 3;
-
-  /**
-   * Two types are equal, if their internal int matches.
-   */
-  operator==(EvaluationType et) => this.type == et.type;
-  
-  int get hashCode => type.hashCode;
-
-  String toString() => 'Type[$_text]';
+enum EvaluationType {
+  REAL, VECTOR, INTERVAL
 }
 
 /**
  * The context model keeps track of all known variables and functions.
- * 
+ *
  * It is structured hierarchically to offer nested scopes.
  */
 class ContextModel {
 
   /// The parent scope.
   ContextModel parentScope;
-  
+
   /// Variable map of this scope (name -> expression).
   Map<String, Expression> variables = new Map();
 
@@ -95,12 +36,12 @@ class ContextModel {
    * Creates a new, empty root context model.
    */
   ContextModel();
-  
+
   /**
    * Internal constructor for creating a child scope.
    */
   ContextModel._child(ContextModel this.parentScope);
-  
+
   /**
    * Returns a new child scope of this scope.
    */
@@ -109,7 +50,7 @@ class ContextModel {
   /**
    * Returns the bound expression for the given variable.
    * Performs recursive lookup through `parentScope`.
-   * 
+   *
    * Throws a [StateError], if variable is still unbound at the root scope.
    */
   Expression getExpression(String varName) {
@@ -125,7 +66,7 @@ class ContextModel {
   /**
    * Returns the function for the given function name.
    * Performs recursive lookup through `parentScope`.
-   * 
+   *
    * Throws a [StateError], if function is still unbound at the root scope.
    */
   MathFunction getFunction(String name) {
@@ -161,7 +102,7 @@ class ContextModel {
     //TODO force non-duplicates.
     functions.add(f);
   }
-  
+
   String toString() => "ContextModel["
                        "PARENT: ${parentScope}, "
                        "VARS: ${variables.toString()}, "
