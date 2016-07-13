@@ -40,4 +40,5 @@ part 'src/algebra.dart';
 part 'src/expression.dart';
 part 'src/functions.dart';
 part 'src/parser.dart';
+part 'src/formatter.dart';
 part 'src/evaluator.dart';

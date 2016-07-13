@@ -145,6 +145,7 @@ abstract class BinaryOperator extends Expression {
    */
   BinaryOperator.raw(this.first, this.second);
 
+  int get precedence;
   String get opString;
 
   @override
@@ -295,7 +296,6 @@ class UnaryMinus extends UnaryOperator {
  * The plus operator performs an addition.
  */
 class Plus extends CommutativeOperator {
-
   /**
    * Creates an addition operation on the given expressions.
    *
@@ -309,6 +309,8 @@ class Plus extends CommutativeOperator {
 
   @override
   String get opString => '+';
+  @override
+  int get precedence => 1;
 
   Expression derive(String toVar) => new Plus(first.derive(toVar),
                                               second.derive(toVar));
@@ -350,7 +352,6 @@ class Plus extends CommutativeOperator {
  * The minus operator performs a subtraction.
  */
 class Minus extends BinaryOperator {
-
   /**
    * Creates a subtaction operation on the given expressions.
    *
@@ -364,6 +365,8 @@ class Minus extends BinaryOperator {
 
   @override
   String get opString => '-';
+  @override
+  int get precedence => 1;
 
   Expression derive(String toVar) => new Minus(first.derive(toVar),
                                                second.derive(toVar));
@@ -404,7 +407,6 @@ class Minus extends BinaryOperator {
  * The times operator performs a multiplication.
  */
 class Times extends CommutativeOperator {
-
   /**
    * Creates a product operation on the given expressions.
    *
@@ -418,6 +420,8 @@ class Times extends CommutativeOperator {
 
   @override
   String get opString => '*';
+  @override
+  int get precedence => 2;
 
   Expression derive(String toVar) => new Plus(
     new Times(first, second.derive(toVar)),
@@ -496,7 +500,6 @@ class Times extends CommutativeOperator {
  * The divide operator performs a division.
  */
 class Divide extends BinaryOperator {
-
   /**
    * Creates a division operation on the given expressions.
    *
@@ -510,6 +513,8 @@ class Divide extends BinaryOperator {
 
   @override
   String get opString => '/';
+  @override
+  int get precedence => 2;
 
   Expression derive(String toVar) => ((first.derive(toVar) * second)
                                     - (first * second.derive(toVar)))
@@ -584,7 +589,6 @@ class Divide extends BinaryOperator {
  * remainder.
  */
 class Modulo extends BinaryOperator {
-
   /**
    * Creates a modulo operation on the given expressions.
    *
@@ -598,6 +602,8 @@ class Modulo extends BinaryOperator {
 
   @override
   String get opString => '%';
+  @override
+  int get precedence => 2;
 
   Expression derive(String toVar) {
     final Abs a2 = new Abs(second);
@@ -631,7 +637,6 @@ class Modulo extends BinaryOperator {
  * The power operator.
  */
 class Power extends BinaryOperator {
-
   /**
    * Creates a power operation on the given expressions.
    *
@@ -648,6 +653,8 @@ class Power extends BinaryOperator {
 
   @override
   String get opString => '^';
+  @override
+  int get precedence => 3;
 
   Expression derive(String toVar) => this.asE().derive(toVar);
 
@@ -787,6 +794,9 @@ abstract class Literal extends Expression {
  * A number is a constant number literal.
  */
 class Number extends Literal {
+  @override
+  double get value => super.value;
+
   /**
    * Creates a number literal with given value.
    * Always holds a double internally.
@@ -945,6 +955,9 @@ class Variable extends Literal {
 //      directly then and remove some complexity.. leaving this in use right now,
 //      since it might be useful some time - maybe for composite functions? (FL)
 class BoundVariable extends Variable {
+  @override
+  Expression get value => super.value;
+
   /**
    * Creates an anonymous variable which is bound to the given expression.
    */
